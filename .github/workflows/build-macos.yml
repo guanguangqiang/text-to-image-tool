@@ -1,0 +1,51 @@
+name: Build macOS applications
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x86_64
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -e '.[dev,build]'
+
+      - name: Test source
+        run: python -m pytest
+
+      - name: Build application
+        run: python -m PyInstaller --noconfirm --clean packaging/fastapi_service_macos.spec
+
+      - name: Ad-hoc sign application
+        run: codesign --force --deep --sign - dist/FastAPI-Service.app
+
+      - name: Test packaged application
+        run: ./verify_macos.sh
+
+      - name: Create ZIP archive
+        run: ditto -c -k --sequesterRsrc --keepParent dist/FastAPI-Service.app "dist/FastAPI-Service-macos-${{ matrix.architecture }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FastAPI-Service-macos-${{ matrix.architecture }}
+          path: dist/FastAPI-Service-macos-${{ matrix.architecture }}.zip
+          if-no-files-found: error
