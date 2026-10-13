@@ -1,1 +1,0 @@
-"""Unversioned operational endpoints."""

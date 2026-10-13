@@ -1,4 +1,4 @@
-name: Build Windows executable
+name: Build Script2Gif for Windows
 
 on:
   workflow_dispatch:
@@ -24,10 +24,16 @@ jobs:
         run: python -m pytest
 
       - name: Build executable
-        run: python -m PyInstaller --noconfirm --clean packaging/fastapi_service.spec
+        run: python -m PyInstaller --noconfirm --clean packaging/script2gif.spec
+
+      - name: Build installer
+        shell: cmd
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss'
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FastAPI-Service-windows-x64
-          path: dist/FastAPI-Service.exe
+          name: Script2Gif-windows-x64
+          path: |
+            dist/Script2Gif
+            dist/installer/*.exe
           if-no-files-found: error

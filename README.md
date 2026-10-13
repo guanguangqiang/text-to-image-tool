@@ -1,149 +1,109 @@
-# FastAPI Service
+# Script2Gif
 
-一个面向实际项目的轻量 FastAPI 骨架，包含配置管理、API 版本、统一异常响应、
-请求 ID、日志、健康检查、测试与 Docker 支持。
+Script2Gif 是一个本地优先的 Windows 桌面工具：用户输入剧本，程序通过
+`qwen3.8-flash` 生成结构化分镜，通过 `wan2.7-image-pro` 生成关键帧，再使用本地
+FFmpeg 制作运镜动画并导出 MP4 和 GIF。
 
-## 快速开始
+程序不使用数据库，也不需要部署服务端。项目、图片和成品保存在用户选择的本地目录；
+阿里云 API Key 存放在 Windows Credential Manager 中，不写入项目和配置文件。
 
-要求 Python 3.9+。
+## 当前功能
+
+- 新建、保存和打开本地项目
+- 剧本导入和可编辑分镜表格
+- Qwen OpenAI 兼容接口结构化生成分镜
+- Wan2.7 异步生成关键帧及任务状态持久化
+- 角色参考图导入和多图参考
+- 相同请求内容哈希缓存
+- FFmpeg 平移、缩放、字幕、MP4 拼接和 GIF 调色板导出
+- 日志轮转、密钥脱敏、缓存与临时文件自动清理
+- PyInstaller Windows `onedir` 打包
+
+## 本地开发
+
+要求 Python 3.9+，推荐 Python 3.12。
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-cp .env.example .env
-uvicorn app.main:app --reload
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python -m pip install -e '.[dev,build]'
+python main.py
 ```
 
-启动后可访问：
+首次启动后打开“设置”，填写：
 
-- Swagger UI: <http://127.0.0.1:8000/docs>
-- 健康检查: <http://127.0.0.1:8000/health>
-- 示例接口: <http://127.0.0.1:8000/api/v1/examples/ping>
+1. 阿里云百炼 Workspace ID；
+2. 对应地域的 API Key；
+3. 本地 FFmpeg 路径（没有随安装包分发时必填）。
 
-生产环境默认关闭 Swagger、ReDoc 与 OpenAPI 地址。如需临时开启，可设置
-`APP_DEBUG=true`。
+北京地域接口地址由程序按以下格式生成：
 
-## 常用命令
+```text
+https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com
+```
+
+也可以在开发环境通过 `DASHSCOPE_API_KEY` 环境变量提供密钥。
+
+## 项目数据
+
+每个作品都是可迁移的独立目录：
+
+```text
+project/
+├── project.json
+├── script.txt
+├── characters/
+├── shots/
+├── assets/
+│   ├── references/
+│   ├── keyframes/
+│   ├── videos/
+│   └── audio/
+├── jobs/
+├── temp/
+├── outputs/
+└── logs/
+```
+
+应用日志、缓存和临时目录位于系统的用户应用数据目录。日志单文件最大 10 MB，保留
+5 份；缓存默认上限 5 GB，过期缓存默认保留 30 天。
+
+## 测试
 
 ```bash
-# 测试
 pytest
-
-# 静态检查
-ruff check .
-ruff format --check .
-
-# Docker
-docker build -t fastapi-service .
-docker run --rm -p 8000:8000 --env-file .env fastapi-service
+ruff check src tests main.py launcher.py
 ```
 
-## 目录结构
+真实模型调用不会进入自动测试，需要用户自己的 API Key。
+
+## Windows 打包
+
+`resources/ffmpeg/` 为空时，目标机器必须安装 FFmpeg，或让用户在设置中选择
+`ffmpeg.exe`。如需随软件分发，将有合法分发许可的 Windows FFmpeg 二进制放到：
 
 ```text
-app/
-├── api/                 # 路由与 API 版本
-├── core/                # 配置、日志、中间件、异常
-├── schemas/             # Pydantic 请求/响应模型
-└── main.py              # 应用工厂与 FastAPI 实例
-tests/                   # pytest 测试
+resources/ffmpeg/ffmpeg.exe
 ```
 
-新增业务模块时，建议将业务逻辑放到 `app/services/`，数据访问放到
-`app/repositories/`，路由函数只负责 HTTP 参数转换与调用编排。
+然后在 Windows 10/11 x64 构建机运行：
 
-## Windows EXE
+```bat
+build_windows.bat
+```
 
-Windows 用户无需安装 Python。双击生成的 `FastAPI-Service.exe` 后，程序会：
-
-1. 在本机随机可用端口启动服务；
-2. 自动打开默认浏览器中的 Swagger 页面；
-3. 显示一个包含“打开浏览器”和“退出”按钮的小窗口。
-
-在 Windows 10/11 构建机中双击 `build_windows.bat`，完成后文件位于：
+输出目录：
 
 ```text
-dist\FastAPI-Service.exe
+dist\Script2Gif\Script2Gif.exe
+dist\installer\Script2Gif-Setup-0.2.0.exe    # 构建机安装 Inno Setup 时生成
 ```
 
-也可以将项目推送到 GitHub，然后手动运行 `Build Windows executable` 工作流。
-构建产物会作为 `FastAPI-Service-windows-x64` Artifact 提供下载。
+PyInstaller 不是跨平台编译器，因此 Windows EXE 必须在 Windows 或 Windows CI 中构建。
 
-PyInstaller 不是跨平台编译器，因此 Windows `.exe` 必须在 Windows 环境中构建。
-应用运行日志保存在：
+## 安全说明
 
-```text
-%LOCALAPPDATA%\FastAPI-Service\logs\app.log
-```
-
-如果 `FastAPI-Service.exe` 同目录存在 `.env`，程序会自动读取它。
-
-构建完成后，在 PowerShell 中运行自动冒烟测试：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\verify_windows.ps1
-```
-
-脚本会启动 EXE、验证 `/health` 和 `/api/v1/examples/ping`，然后自动结束测试进程。
-
-## macOS 测试应用
-
-macOS 不使用 `.exe`，对应的交付物是可双击运行的 `FastAPI-Service.app`。
-应用已经包含 Python 解释器和全部依赖，因此目标 Mac 不需要安装 Python。
-
-### 在当前 Mac 构建
-
-```bash
-chmod +x build_macos.sh verify_macos.sh
-./build_macos.sh
-```
-
-脚本会运行单元测试、构建应用、执行打包后的接口冒烟测试，并生成与当前
-Mac 芯片架构对应的 ZIP：
-
-```text
-dist/FastAPI-Service-macos-arm64.zip
-```
-
-Intel Mac 上的文件名为：
-
-```text
-dist/FastAPI-Service-macos-x86_64.zip
-```
-
-也可以将项目推送到 GitHub，手动运行 `Build macOS applications` 工作流。
-工作流会同时生成两个 Artifact：
-
-- `FastAPI-Service-macos-arm64`：Apple 芯片（M1/M2/M3/M4 等）
-- `FastAPI-Service-macos-x86_64`：Intel 芯片
-
-GitHub 当前为这两个构建分别使用 arm64 和 Intel macOS 运行器。
-
-### 在没有 Python 的 Mac 上验证
-
-1. 在目标 Mac 的“关于本机”中确认芯片类型，并复制对应的 ZIP 文件；
-2. 解压 ZIP，得到 `FastAPI-Service.app`；
-3. 第一次运行时右键应用并选择“打开”，然后确认“打开”；
-4. 应用会自动启动本地服务并打开 Swagger 页面；
-5. 访问 `/health`，确认返回的 `status` 为 `ok`；
-6. 在窗口中点击“退出”，确认服务随应用一起关闭。
-
-如果系统仍然拦截未公证应用，可前往“系统设置 → 隐私与安全性”，在安全提示中
-选择“仍要打开”。测试版本采用临时签名；正式对外发布时应使用 Apple Developer ID
-证书签名并提交 Apple 公证。
-
-应用日志位于：
-
-```text
-~/Library/Logs/FastAPI-Service/app.log
-```
-
-若需自动验证当前已构建的 `.app`，可运行：
-
-```bash
-./verify_macos.sh
-```
-
-PyInstaller 不是跨平台编译器；macOS `.app` 必须在对应架构的 Mac 或 GitHub macOS
-运行器上构建。
+- 不要将开发者自己的 API Key 写入 EXE 或源码。
+- 对外分发时使用 BYOK：每位用户输入自己的百炼 API Key。
+- `project.json` 和日志不会记录 API Key。
+- 发布前应对安装包签名，并确认所分发 FFmpeg 构建的许可证要求。
